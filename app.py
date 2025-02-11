@@ -83,11 +83,9 @@ def generate_token():
 
 
 
-@app.route('/hola')
+@app.route('/hola', methods=['GET'])
 def hola():
     return jsonify({"mensaje": "Hola"}), 201
-
-
 
 
 @app.route('/')
