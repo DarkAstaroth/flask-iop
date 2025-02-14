@@ -8,8 +8,7 @@ app = Flask(__name__)
 
 
 # Configuración de la API de Kong
-KONG_ADMIN_URL = "http://localhost:8001"  # URL de la API administrativa de Kong
-CONSUMER_USERNAME = "my_consumer"  # Nombre del consumidor en Kong
+KONG_ADMIN_URL = "https://kong-konga-production.up.railway.app"  # URL de la API administrativa de Kong
 
 # Ruta para generar un token JWT con expiración personalizada
 @app.route('/generar-token', methods=['POST'])
@@ -19,6 +18,7 @@ def generate_token():
         data = request.json
         unit = data.get("unit")  # Tipo de unidad (día, semana, mes)
         value = data.get("value")  # Valor (1, 2, 3, etc.)
+        CONSUMER_USERNAME = data.get("consumidor")  # Nombre del consumidor en Kong
 
         # Validar los datos de entrada
         if not unit or not value:
@@ -63,11 +63,16 @@ def generate_token():
         elif unit == "month":
             expiration_time = current_time + (value * 2592000)  # 1 mes = 2592000 segundos (30 días)
 
-        # Crear el payload del JWT
+        # Crear el payload del JWT con los campos adicionales
         payload = {
             "iss": consumer_key,  # Campo requerido por Kong
             "iat": current_time,   # Fecha de emisión
-            "exp": expiration_time # Fecha de expiración
+            "exp": expiration_time, # Fecha de expiración
+            "EntidadConsumidora": "1",  # Campo hardcodeado
+            "SistemaConsumidor": "1",    # Campo hardcodeado
+            "SistemaPublicador": "1",    # Campo hardcodeado
+            "Servicio": "1",                      # Campo hardcodeado
+            "EntidadPublicadora": "entidad-publicadora"  # Campo hardcodeado
         }
 
         # Generar el token JWT
