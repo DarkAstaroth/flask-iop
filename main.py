@@ -137,11 +137,8 @@ def consultar_bitacora():
         idTransaccion = request.args.get("idTransaccion")
         usuarioConsumidor = request.args.get("usuarioConsumidor")
         estado = request.args.get("estado")
-        limit = int(
-            request.args.get("limit", 10)
-        )  # Límite de resultados (por defecto 10)
 
-        # Construir la consulta SQL
+        # Construir la consulta SQL para obtener los datos
         query = f"SELECT * FROM {CLICKHOUSE_TABLE} WHERE 1=1"
         if idTransaccion:
             query += f" AND idTransaccion = '{idTransaccion}'"
@@ -149,9 +146,8 @@ def consultar_bitacora():
             query += f" AND usuarioConsumidor = '{usuarioConsumidor}'"
         if estado:
             query += f" AND estado = '{estado}'"
-        query += f" LIMIT {limit}"
 
-        # Ejecutar la consulta
+        # Ejecutar la consulta para obtener los datos
         result = clickhouse_client.query(query)
 
         # Convertir el resultado a un formato JSON
@@ -175,7 +171,28 @@ def consultar_bitacora():
                 }
             )
 
-        return jsonify({"datos": datos}), 200
+        # Construir la consulta SQL para contar el total de registros
+        count_query = f"SELECT count() FROM {CLICKHOUSE_TABLE} WHERE 1=1"
+        if idTransaccion:
+            count_query += f" AND idTransaccion = '{idTransaccion}'"
+        if usuarioConsumidor:
+            count_query += f" AND usuarioConsumidor = '{usuarioConsumidor}'"
+        if estado:
+            count_query += f" AND estado = '{estado}'"
+
+        # Ejecutar la consulta para contar los registros
+        count_result = clickhouse_client.query(count_query)
+        total_registros = count_result.result_rows[0][
+            0
+        ]  # Obtener el total de registros
+
+        # Devolver la respuesta con los datos y el total de registros
+        return jsonify(
+            {
+                "total_registros": total_registros,
+                "datos": datos,
+            }
+        ), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
