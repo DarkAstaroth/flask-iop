@@ -171,6 +171,75 @@ def crear_servicio():
         ), 500  # Retornar un error 500 con el mensaje de error capturado
 
 
+@app.route("/crear-consumidor", methods=["POST"])
+def crear_consumidor():
+    try:
+        data = request.json
+        nombre_consumidor = data.get("nombre")
+        servicio = data.get("servicio")
+        rate_limit_tipo = data.get("rate_limit_tipo")
+        rate_limit_valor = data.get("rate_limit_valor")
+
+        if (
+            not nombre_consumidor
+            or not servicio
+            or not rate_limit_tipo
+            or not rate_limit_valor
+        ):
+            return jsonify(
+                {
+                    "error": "Se requieren 'nombre', 'servicio', 'rate_limit_tipo' y 'rate_limit_valor'"
+                }
+            ), 400
+
+        response_consumidor = requests.post(
+            f"{KONG_ADMIN_URL}/consumers", json={"username": nombre_consumidor}
+        )
+        if response_consumidor.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo crear el consumidor",
+                    "detalles": response_consumidor.json(),
+                }
+            ), 500
+
+        response_jwt = requests.post(
+            f"{KONG_ADMIN_URL}/consumers/{nombre_consumidor}/jwt"
+        )
+        if response_jwt.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo habilitar el plugin JWT para el consumidor",
+                    "detalles": response_jwt.json(),
+                }
+            ), 500
+
+        response_rate_limit = requests.post(
+            f"{KONG_ADMIN_URL}/consumers/{nombre_consumidor}/plugins",
+            files={
+                "name": (None, "rate-limiting"),
+                f"config.{rate_limit_tipo}": (None, str(rate_limit_valor)),
+            },
+        )
+        if response_rate_limit.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo habilitar el plugin rate-limiting",
+                    "detalles": response_rate_limit.json(),
+                }
+            ), 500
+
+        return jsonify(
+            {
+                "mensaje": "Consumidor creado exitosamente en Kong",
+                "nombre_consumidor": nombre_consumidor,
+            }
+        ), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # Ruta para generar un token JWT con expiración personalizada
 @app.route("/generar-token", methods=["POST"])
 def generate_token():
