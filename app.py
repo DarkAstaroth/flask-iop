@@ -4,6 +4,7 @@ import jwt
 import time
 import requests
 import clickhouse_connect
+import re
 
 app = Flask(__name__)
 
@@ -34,6 +35,140 @@ except Exception as e:
 
 # Configuración de la API de Kong
 KONG_ADMIN_URL = "https://kong-konga-production.up.railway.app"  # URL de la API administrativa de Kong
+
+
+@app.route("/crear-servicio", methods=["POST"])
+def crear_servicio():
+    try:
+        # Obtener los datos del cuerpo de la solicitud
+        data = request.json
+        entidad = data.get("entidad")  # Sigla de la entidad
+        version = data.get("version")  # Version del servicio
+        nombre = data.get("nombre")  # Nombre del servicio
+
+        url = data.get("url")  # URL del servicio
+        token = data.get("token")  # token del servicio
+
+        # Validar que los campos obligatorios estén presentes
+        if not entidad or not version or not nombre or not url:
+            return jsonify(
+                {"error": "Se requieren 'entidad', 'version', 'nombre' y 'url'"}
+            ), 400
+
+        # Reemplazar espacios y caracteres no permitidos con guiones bajos
+        def formatear_nombre(texto):
+            # Reemplazar espacios y caracteres no permitidos con guiones bajos
+            texto = re.sub(r"[^a-zA-Z0-9._-]", "_", texto)
+            return texto
+
+        entidad_formateada = formatear_nombre(entidad)
+        version_formateada = formatear_nombre(version)
+        nombre_formateado = formatear_nombre(nombre)
+
+        # Formar el nombre del servicio sin caracteres no permitidos
+        nombre_servicio = (
+            f"{entidad_formateada}_{version_formateada}_{nombre_formateado}"
+        )
+
+        # Crear el servicio en Kong
+        servicio_kong = {
+            "name": nombre_servicio,  # Nombre del servicio en Kong
+            "url": url,  # URL del backend
+        }
+
+        response = requests.post(f"{KONG_ADMIN_URL}/services", json=servicio_kong)
+
+        # Verificar si la creación del servicio fue exitosa
+        if response.status_code != 201:
+            return jsonify(
+                {
+                    "error": "No se pudo crear el servicio en Kong",
+                    "detalles": response.json(),
+                }
+            ), 500
+
+        # Crear una ruta (route) para el servicio en Kong con barras
+        ruta = f"/{entidad}/{version}/{nombre_formateado}"
+        ruta_kong = {
+            "paths": [f"{ruta}"],  # Ruta con barras
+            "service": {"name": nombre_servicio},  # Nombre del servicio asociado
+        }
+
+        # Hacer una solicitud POST a la API de Kong para crear la ruta
+        response_ruta = requests.post(f"{KONG_ADMIN_URL}/routes", json=ruta_kong)
+
+        # Verificar si la creación de la ruta fue exitosa
+        if response_ruta.status_code != 201:
+            return jsonify(
+                {
+                    "error": "No se pudo crear la ruta en Kong",
+                    "detalles": response_ruta.json(),
+                }
+            ), 500
+
+        def habilitar_plugin(nombre_plugin, config=None):
+            payload = {"name": nombre_plugin}
+            if config:
+                payload.update(config)
+            response = requests.post(
+                f"{KONG_ADMIN_URL}/services/{nombre_servicio}/plugins", data=payload
+            )
+            return response
+
+        response_jwt = habilitar_plugin("jwt")
+        if response_jwt.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo habilitar el plugin JWT",
+                    "detalles": response_jwt.json(),
+                }
+            ), 500
+
+        response_mirror = habilitar_plugin(
+            "mirror-req-traffic",
+            {
+                "config.mirror_url": "https://fastapi-production-8132.up.railway.app/bitacora",
+                "config.connect_timeout": "6000",
+                "config.ssl_verify": "true",
+            },
+        )
+        if response_mirror.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo habilitar el plugin mirror-req-traffic",
+                    "detalles": response_mirror.json(),
+                }
+            ), 500
+
+        response_transform = habilitar_plugin(
+            "request-transformer",
+            {
+                "config.add.headers": f"Authorization:Bearer {token}",
+                "config.remove.headers": "authorization",
+            },
+        )
+        if response_transform.status_code not in [201, 200]:
+            return jsonify(
+                {
+                    "error": "No se pudo habilitar el plugin request-transformer",
+                    "detalles": response_transform.json(),
+                }
+            ), 500
+
+        return jsonify(
+            {
+                "mensaje": "Servicio creado exitosamente en Kong",
+                "nombre_servicio": nombre_servicio,
+                "url_backend": url,
+                "ruta_kong": f"{ruta}",
+                "token": token,
+            }
+        ), 200
+
+    except Exception as e:  # Capturar cualquier excepción
+        return jsonify(
+            {"error": str(e)}
+        ), 500  # Retornar un error 500 con el mensaje de error capturado
 
 
 # Ruta para generar un token JWT con expiración personalizada
