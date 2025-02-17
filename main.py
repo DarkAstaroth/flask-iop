@@ -7,6 +7,30 @@ import clickhouse_connect
 
 app = Flask(__name__)
 
+# Configuración de ClickHouse
+CLICKHOUSE_HOST = "clickhouse-4bj6-production.up.railway.app"
+CLICKHOUSE_PORT = 443
+CLICKHOUSE_USER = "clickhouse"
+CLICKHOUSE_PASSWORD = "IhaRmopenWm5lCav8huJkdmPF9bgApVN"
+CLICKHOUSE_DATABASE = "railway"
+CLICKHOUSE_TABLE = "bitacora"
+
+
+# Conectar a ClickHouse
+try:
+    clickhouse_client = clickhouse_connect.get_client(
+        host=CLICKHOUSE_HOST,
+        port=CLICKHOUSE_PORT,
+        username=CLICKHOUSE_USER,
+        password=CLICKHOUSE_PASSWORD,
+        database=CLICKHOUSE_DATABASE,
+        secure=True,
+    )
+    print("Conexión exitosa a ClickHouse!")
+except Exception as e:
+    print(f"Error al conectar a ClickHouse: {e}")
+    exit(1)
+
 
 # Configuración de la API de Kong
 KONG_ADMIN_URL = "https://kong-konga-production.up.railway.app"  # URL de la API administrativa de Kong
@@ -18,8 +42,8 @@ def generate_token():
     try:
         # Obtener los datos del cuerpo de la solicitud
         data = request.json
-        unit = data.get("tipo")  # Tipo de unidad (día, semana, mes)
-        value = data.get("valor")  # Valor (1, 2, 3, etc.)
+        unit = data.get("unit")  # Tipo de unidad (día, semana, mes)
+        value = data.get("value")  # Valor (1, 2, 3, etc.)
         CONSUMER_USERNAME = data.get("consumidor")  # Nombre del consumidor en Kong
 
         # Validar los datos de entrada
@@ -100,6 +124,58 @@ def generate_token():
                 ),
             }
         )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Endpoint para consultar la tabla bitacora
+@app.route("/consultar-bitacora", methods=["GET"])
+def consultar_bitacora():
+    try:
+        # Obtener parámetros de consulta
+        idTransaccion = request.args.get("idTransaccion")
+        usuarioConsumidor = request.args.get("usuarioConsumidor")
+        estado = request.args.get("estado")
+        limit = int(
+            request.args.get("limit", 10)
+        )  # Límite de resultados (por defecto 10)
+
+        # Construir la consulta SQL
+        query = f"SELECT * FROM {CLICKHOUSE_TABLE} WHERE 1=1"
+        if idTransaccion:
+            query += f" AND idTransaccion = '{idTransaccion}'"
+        if usuarioConsumidor:
+            query += f" AND usuarioConsumidor = '{usuarioConsumidor}'"
+        if estado:
+            query += f" AND estado = '{estado}'"
+        query += f" LIMIT {limit}"
+
+        # Ejecutar la consulta
+        result = clickhouse_client.query(query)
+
+        # Convertir el resultado a un formato JSON
+        datos = []
+        for row in result.result_rows:
+            datos.append(
+                {
+                    "idTransaccion": row[0],
+                    "idSolicitud": row[1],
+                    "codTramite": row[2],
+                    "nroTramite": row[3],
+                    "usuarioConsumidor": row[4],
+                    "entidadConsumidora": row[5],
+                    "sistemaConsumidor": row[6],
+                    "sistemaPublicador": row[7],
+                    "servicio": row[8],
+                    "entidadPublicadora": row[9],
+                    "fechayHora": row[10].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "estado": row[11],
+                    "codHTTP": row[12],
+                }
+            )
+
+        return jsonify({"datos": datos}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
