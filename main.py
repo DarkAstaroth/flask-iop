@@ -92,6 +92,7 @@ def crear_servicio():
         ruta_kong = {
             "paths": [f"{ruta}"],  # Ruta con barras
             "service": {"name": nombre_servicio},  # Nombre del servicio asociado
+            "methods": ["POST"],  # Permitir solo el método POST
         }
 
         # Hacer una solicitud POST a la API de Kong para crear la ruta
