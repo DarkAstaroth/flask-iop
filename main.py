@@ -310,11 +310,11 @@ def generate_token():
             "iss": consumer_key,  # Campo requerido por Kong
             "iat": current_time,  # Fecha de emisión
             "exp": expiration_time,  # Fecha de expiración
-            "EntidadConsumidora": "1",  # Campo hardcodeado
-            "SistemaConsumidor": "1",  # Campo hardcodeado
-            "SistemaPublicador": "1",  # Campo hardcodeado
-            "Servicio": "1",  # Campo hardcodeado
-            "EntidadPublicadora": "entidad-publicadora",  # Campo hardcodeado
+            "EntidadConsumidora": "agetic",
+            "SistemaConsumidor": "planes",
+            "SistemaPublicador": "ciudadania",
+            "Servicio": "servicio-de-listado-de-usuarios",
+            "EntidadPublicadora": "entidad-publicadora",
         }
 
         # Generar el token JWT
