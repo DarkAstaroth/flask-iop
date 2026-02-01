@@ -1,5 +1,5 @@
 Flask
 pyjwt
 requests
-gunicorn==20.1.0
+gunicorn==25.0.0
 clickhouse_connect==0.6.15
